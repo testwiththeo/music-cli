@@ -1,9 +1,16 @@
 {
   "name": "music-cli",
+  "version": "0.2.0",
+  "description": "YouTube music CLI with Pomodoro focus sessions",
   "module": "index.ts",
   "type": "module",
   "bin": {
     "music": "./index.ts"
+  },
+  "scripts": {
+    "start": "bun run index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest"

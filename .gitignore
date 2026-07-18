@@ -1,3 +1,6 @@
+# local planning docs (never push to GitHub)
+docs/
+
 # dependencies (bun install)
 node_modules
 
