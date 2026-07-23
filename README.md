@@ -1,13 +1,13 @@
-# YouTube Music Player CLI
+# music-cli
 
-A minimal CLI music player that searches YouTube and streams audio directly without saving files.
+A keyboard-first YouTube music player with Pomodoro focus sessions. Audio streams directly; nothing is downloaded.
 
 ## Features
 
-- Search YouTube for music
-- Interactive selection with arrow keys
-- Stream audio on-demand (no local storage)
-- Simple and minimal
+- Search YouTube and select with arrow keys
+- Stream audio on demand without local media files
+- Start a Pomodoro session with focus music
+- Neon ASCII banner, responsive now-playing panels, spinners, and live progress
 
 ## Prerequisites
 
@@ -28,32 +28,59 @@ You need to have these installed:
    - Linux: `sudo apt install yt-dlp` or `pip install yt-dlp`
    - Windows: Download from [github.com/yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp)
 
-## Installation
+## Setup
 
 ```bash
+git clone https://github.com/testwiththeo/music-cli.git
+cd music-cli
 bun install
+ln -sf "$PWD/index.ts" ~/.local/bin/music
 ```
+
+The final command creates the `music` shortcut once. Restart your terminal if the command is not found.
 
 ## Usage
 
-Run the music player:
-
 ```bash
-bun run index.ts
+# Interactive search
+music
+
+# Search immediately
+music "lofi hip hop"
+
+# Pomodoro defaults: 25m focus, 5m break, 4 focuses
+music --pomodoro --query "lofi hip hop"
+
+# Quick one-minute smoke test
+music --pomodoro --focus 1 --break 1 --cycles 1 --query "lofi hip hop"
+
+# See every option
+music --help
 ```
 
-Or make it executable and run directly:
+Set `NO_COLOR=1` to disable terminal colors.
+
+## Pomodoro Controls
+
+- `s`: skip the current phase
+- `Esc`: stop music and keep the timer running
+- `q` or `Ctrl+C`: quit the session
+
+## Playback Controls
+
+- `←`: seek back 5 seconds
+- `→`: seek forward 5 seconds
+- `Esc`: stop playback
+- `Ctrl+C`: quit
+
+## Development
+
+Use these only when developing the project:
 
 ```bash
-./index.ts
+bun test
+bun run typecheck
 ```
-
-## How it works
-
-1. Enter your search query (e.g., "lofi hip hop")
-2. Select a track from the results using arrow keys
-3. Press Enter to play
-4. Press Ctrl+C to stop playback
 
 ## Notes
 
