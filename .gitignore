@@ -1,6 +1,10 @@
 # local planning docs (never push to GitHub)
 docs/
 
+# local AI assistant instructions
+/CLAUDE.md
+/.cursor/rules/
+
 # dependencies (bun install)
 node_modules
 

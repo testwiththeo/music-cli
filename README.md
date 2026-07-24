@@ -1,34 +1,55 @@
 # music-cli
 
-A keyboard-first YouTube music player with Pomodoro focus sessions. Audio streams directly; nothing is downloaded.
+> Play music, not the recommendation feed.
 
-## Features
+YouTube is great at finding a song and terrible at letting you return to work.
+One search becomes thumbnails, comments, Shorts, autoplay, and another 20 minutes
+gone. `music-cli` keeps the useful part: search for a track, stream it in your
+terminal, and keep your attention where it belongs.
 
-- Search YouTube and select with arrow keys
-- Stream audio on demand without local media files
-- Start a Pomodoro session with focus music
-- Neon ASCII banner, responsive now-playing panels, spinners, and live progress
+It is a keyboard-first music player with a built-in Pomodoro mode for focused
+work sessions. No browser tab. No downloads. No recommendation rabbit hole.
 
-## Prerequisites
+```text
+  __  __ _   _ ____ ___ ____
+ |  \/  | | | / ___|_ _/ ___|  // CLI
+ | |\/| | | | \___ \| |\___ \
+ | |  | | |_| |___) | | ___) |
+ |_|  |_|\___/|____/___|____/
 
-You need to have these installed:
+  terminal sound system · search / stream / focus
+```
 
-1. **Bun** - JavaScript runtime
-   ```bash
-   curl -fsSL https://bun.sh/install | bash
-   ```
+## Why?
 
-2. **FFmpeg** - For audio playback
-   - macOS: `brew install ffmpeg`
-   - Linux: `sudo apt install ffmpeg` or `sudo dnf install ffmpeg`
-   - Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+Browser music is built to maximize watch time, not focus. `music-cli` is for
+developers and terminal people who want background music without inviting an
+algorithm into their workflow.
 
-3. **yt-dlp** - For YouTube streaming
-   - macOS: `brew install yt-dlp`
-   - Linux: `sudo apt install yt-dlp` or `pip install yt-dlp`
-   - Windows: Download from [github.com/yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- Search and choose tracks with the keyboard.
+- Stream audio directly, without saving media files.
+- Run 25/5 Pomodoro sessions with optional focus music.
+- Get a responsive terminal UI with status cards, spinners, and live progress.
+- Keep it local: no account, cookies, history sync, or browser session.
 
-## Setup
+## Quick Start
+
+### Prerequisites
+
+- [Bun](https://bun.sh)
+- [FFmpeg](https://ffmpeg.org/) with `ffplay`
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt install ffmpeg
+curl -fsSL https://bun.sh/install | bash
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o ~/.local/bin/yt-dlp
+chmod +x ~/.local/bin/yt-dlp
+```
+
+### Install
 
 ```bash
 git clone https://github.com/testwiththeo/music-cli.git
@@ -37,55 +58,63 @@ bun install
 ln -sf "$PWD/index.ts" ~/.local/bin/music
 ```
 
-The final command creates the `music` shortcut once. Restart your terminal if the command is not found.
+The final command creates `music` as a one-time shortcut. Restart your terminal
+if `music` is not found.
 
 ## Usage
 
 ```bash
-# Interactive search
+# Open the interactive player
 music
 
 # Search immediately
-music "lofi hip hop"
+music "Nujabes modal soul"
 
-# Pomodoro defaults: 25m focus, 5m break, 4 focuses
+# Start a 25/5 focus session with music
 music --pomodoro --query "lofi hip hop"
 
-# Quick one-minute smoke test
-music --pomodoro --focus 1 --break 1 --cycles 1 --query "lofi hip hop"
+# Try a one-minute focus session
+music --pomodoro --focus 1 --break 1 --cycles 1 --query "jazz focus"
 
-# See every option
+# See all options
 music --help
 ```
 
-Set `NO_COLOR=1` to disable terminal colors.
+Set `NO_COLOR=1` to run without terminal colors.
 
-## Pomodoro Controls
+## Controls
 
-- `s`: skip the current phase
-- `Esc`: stop music and keep the timer running
-- `q` or `Ctrl+C`: quit the session
+| Context | Key | Action |
+| --- | --- | --- |
+| Playback | `←` / `→` | Seek backward / forward 5 seconds |
+| Playback | `Esc` | Stop playback |
+| Playback | `Ctrl+C` | Quit |
+| Pomodoro | `s` | Skip the current phase |
+| Pomodoro | `Esc` | Stop music and keep the timer running |
+| Pomodoro | `q` / `Ctrl+C` | Quit the session |
 
-## Playback Controls
+## How It Works
 
-- `←`: seek back 5 seconds
-- `→`: seek forward 5 seconds
-- `Esc`: stop playback
-- `Ctrl+C`: quit
+1. `yt-search` finds matching YouTube videos.
+2. `yt-dlp` resolves a fresh audio stream only when a track starts.
+3. `ffplay` plays the stream directly.
+4. Arrow-key seeking restarts `ffplay` at the requested offset, which keeps the
+   terminal in control of keyboard input.
+
+No audio URLs are stored. No media files are downloaded.
+
+## Limitations
+
+- An internet connection and a working audio device are required.
+- Playback depends on YouTube, `yt-dlp`, and `ffplay`; provider changes can
+  affect availability.
+- This project is not affiliated with YouTube or Google.
+- Use it responsibly and in accordance with the terms that apply to the media
+  you access.
 
 ## Development
-
-Use these only when developing the project:
 
 ```bash
 bun test
 bun run typecheck
 ```
-
-## Notes
-
-- Audio streams directly from YouTube (no files saved)
-- Requires active internet connection
-- Uses `yt-dlp` CLI tool to get stream URLs
-- Uses `ffplay` (part of FFmpeg) for audio playback
-- Uses `yt-search` for YouTube search
