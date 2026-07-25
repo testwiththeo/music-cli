@@ -30,6 +30,7 @@ algorithm into their workflow.
 - Stream audio directly, without saving media files.
 - Run 25/5 Pomodoro sessions with optional focus music.
 - Get a responsive terminal UI with status cards, spinners, and live progress.
+- Keep listening with relevance-ranked autoplay after each completed track.
 - Keep it local: no account, cookies, history sync, or browser session.
 
 ## Quick Start
@@ -70,6 +71,9 @@ music
 # Search immediately
 music "Nujabes modal soul"
 
+# When a track finishes, music-cli automatically plays an unplayed, relevant track.
+# Press Esc at any time to stop autoplay and return to the result list.
+
 # Start a 25/5 focus session with music
 music --pomodoro --query "lofi hip hop"
 
@@ -100,6 +104,9 @@ Set `NO_COLOR=1` to run without terminal colors.
 3. `ffplay` plays the stream directly.
 4. Arrow-key seeking restarts `ffplay` at the requested offset, which keeps the
    terminal in control of keyboard input.
+5. After a track completes, candidates are ranked by artist, title, and the
+   original search. Played tracks are excluded. When the original results are
+   exhausted, a fresh artist-and-query search expands the radio.
 
 No audio URLs are stored. No media files are downloaded.
 

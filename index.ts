@@ -21,6 +21,11 @@ import {
   withSpinner,
 } from './src/ui';
 import { isEscapeKey, seekOffsetForKey } from './src/playback-controls';
+import {
+  buildRecommendationQuery,
+  pickRecommendation,
+  type RecommendationTrack,
+} from './src/recommendations';
 
 const exec = promisify(execCallback);
 
@@ -61,6 +66,40 @@ function parseDuration(timestamp: string): number {
     return hh * 3600 + mm * 60 + ss;
   }
   return 0;
+}
+
+function asRecommendationTrack(video: VideoInfo): RecommendationTrack {
+  return {
+    id: video.videoId,
+    title: video.title,
+    artist: video.author.name,
+  };
+}
+
+function pickVideoRecommendation(
+  current: VideoInfo,
+  candidates: VideoInfo[],
+  sourceQuery: string,
+  playedIds: ReadonlySet<string>,
+): VideoInfo | null {
+  const recommendation = pickRecommendation(
+    asRecommendationTrack(current),
+    candidates.map(asRecommendationTrack),
+    sourceQuery,
+    playedIds,
+  );
+  return recommendation
+    ? candidates.find((candidate) => candidate.videoId === recommendation.id) ?? null
+    : null;
+}
+
+function printNowPlaying(video: VideoInfo, autoplay: boolean) {
+  console.log('');
+  printCard(autoplay ? 'AUTOPLAY · FOR YOU' : 'NOW PLAYING', [
+    ui.cyan(video.title),
+    `${video.author.name} · ${video.duration.timestamp}`,
+  ]);
+  console.log('');
 }
 
 function drawProgressBar(current: number, total: number) {
@@ -232,7 +271,7 @@ Pomodoro options:
   --break-query "<q>"  Optional music for breaks (default: silence)
 
 Keys (pomodoro): s skip phase · Esc stop music only · q quit · Ctrl+C quit
-Keys (playback): ←/→ seek 5s · Esc stop · Ctrl+C quit
+Keys (playback): ←/→ seek 5s · Esc stop autoplay · Ctrl+C quit
 
 Examples:
   music --pomodoro --query "lofi hip hop"
@@ -509,19 +548,40 @@ async function main() {
           break; // Exit the inner loop to get new search query
         }
 
-        console.log('');
-        printCard('NOW PLAYING', [
-          ui.cyan(selectedVideo.title),
-          `${selectedVideo.author.name} · ${selectedVideo.duration.timestamp}`,
-        ]);
-        console.log('');
+        let currentVideo = selectedVideo;
+        let recommendationPool = results;
+        const playedIds = new Set<string>();
+        let autoplay = false;
 
-        // Play the selected video
-        const { stoppedByUser } = await playAudio(selectedVideo.url, selectedVideo.duration.timestamp);
+        while (true) {
+          printNowPlaying(currentVideo, autoplay);
+          playedIds.add(currentVideo.videoId);
 
-        // If stopped by user (Esc), show the same results again
-        // If finished naturally, exit loop and ask for new search
-        continueWithSameResults = stoppedByUser;
+          const { stoppedByUser } = await playAudio(currentVideo.url, currentVideo.duration.timestamp);
+          if (stoppedByUser) {
+            // Escape is an intentional stop: return to the user's current results.
+            continueWithSameResults = true;
+            break;
+          }
+
+          let nextVideo = pickVideoRecommendation(currentVideo, recommendationPool, query, playedIds);
+          if (!nextVideo) {
+            const recommendationQuery = buildRecommendationQuery(asRecommendationTrack(currentVideo), query);
+            printStatus('info', `Finding more like ${currentVideo.author.name}`);
+            recommendationPool = await searchYouTube(recommendationQuery);
+            nextVideo = pickVideoRecommendation(currentVideo, recommendationPool, query, playedIds);
+          }
+
+          if (!nextVideo) {
+            printStatus('warning', 'No new recommendation found · start another search');
+            continueWithSameResults = false;
+            break;
+          }
+
+          printStatus('success', `Up next: ${nextVideo.title} — ${nextVideo.author.name}`);
+          currentVideo = nextVideo;
+          autoplay = true;
+        }
       }
 
     } catch (error) {
