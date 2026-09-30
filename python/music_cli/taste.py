@@ -1,9 +1,23 @@
 """Local taste profile — the data layer for personalized radio.
 
 Replaces Spotify's server-side taste profile with a local one: plays and
-skips per artist, plus search-query counts. Stored under the platform data
-directory (XDG on Linux, Application Support on macOS, APPDATA on Windows).
-No accounts, no telemetry — the profile never leaves the machine.
+skips per artist. Stored under the platform data directory (XDG on Linux,
+Application Support on macOS, APPDATA on Windows). No accounts, no telemetry
+— the profile never leaves the machine.
+
+On-disk schema (taste.json)::
+
+    {
+      "version": 1,
+      "artists": {
+        "<artist name lowercased>": {
+          "plays": <int>, "skips": <int>, "last_played": <unix seconds float>
+        }
+      }
+    }
+
+Deliberately excludes search queries: the PRD requires that no search
+history is persisted in the first release.
 """
 
 from __future__ import annotations
@@ -34,7 +48,6 @@ class ArtistStats:
 class TasteProfile:
     version: int = PROFILE_VERSION
     artists: Dict[str, ArtistStats] = field(default_factory=dict)
-    queries: Dict[str, int] = field(default_factory=dict)
 
     def artist_stats(self, artist: str) -> Optional[ArtistStats]:
         return self.artists.get(artist.strip().lower())
@@ -67,9 +80,6 @@ def load_profile() -> TasteProfile:
                 skips=int(stats.get("skips", 0)),
                 last_played=float(stats.get("last_played", 0.0)),
             )
-    for query, count in (data.get("queries") or {}).items():
-        if isinstance(count, int):
-            profile.queries[query] = count
     return profile
 
 
@@ -94,7 +104,6 @@ def save_profile(profile: TasteProfile) -> None:
             name: {"plays": s.plays, "skips": s.skips, "last_played": s.last_played}
             for name, s in profile.artists.items()
         },
-        "queries": profile.queries,
     }
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".taste-", suffix=".tmp")
     try:
@@ -109,11 +118,8 @@ def save_profile(profile: TasteProfile) -> None:
         raise
 
 
-def record_play(profile: TasteProfile, track: RecommendationTrack, query: Optional[str] = None) -> None:
+def record_play(profile: TasteProfile, track: RecommendationTrack) -> None:
     _record(profile, track, played=True)
-    if query and query.strip():
-        key = query.strip().lower()
-        profile.queries[key] = profile.queries.get(key, 0) + 1
 
 
 def record_skip(profile: TasteProfile, track: RecommendationTrack) -> None:

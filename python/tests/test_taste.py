@@ -37,7 +37,7 @@ class TasteProfileTest(unittest.TestCase):
     def test_plays_and_skips_persist(self):
         profile = load_profile()
         track = RecommendationTrack(id="1", title="Feather", artist="Nujabes")
-        record_play(profile, track, "Lofi Hip Hop")
+        record_play(profile, track)
         record_play(profile, track)
         record_skip(profile, track)
         save_profile(profile)
@@ -46,7 +46,17 @@ class TasteProfileTest(unittest.TestCase):
         stats = loaded.artist_stats("nujabes")
         self.assertEqual(stats.plays, 2)
         self.assertEqual(stats.skips, 1)
-        self.assertEqual(loaded.queries.get("lofi hip hop"), 1)
+
+    def test_schema_persists_no_search_history(self):
+        # PRD non-goal: no search history may be persisted in the first release.
+        import json
+
+        profile = TasteProfile()
+        record_play(profile, RecommendationTrack(id="1", title="T", artist="Nujabes"))
+        save_profile(profile)
+        path = Path(os.environ["XDG_DATA_HOME"]) / "music-cli" / "taste.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(set(data.keys()), {"version", "artists"})
 
     def test_save_is_atomic_no_tmp_leftover(self):
         profile = TasteProfile()
