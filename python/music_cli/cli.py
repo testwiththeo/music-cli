@@ -35,6 +35,7 @@ from .recommendations import (
     build_recommendation_query,
     pick_recommendation,
 )
+from .taste import TasteProfile, load_profile, record_play, record_skip
 from .ui import (
     dim,
     print_banner,
@@ -56,7 +57,13 @@ def search_youtube(query: str) -> List[VideoInfo]:
 
 
 def as_recommendation_track(video: VideoInfo) -> RecommendationTrack:
-    return RecommendationTrack(id=video.video_id, title=video.title, artist=video.author_name)
+    return RecommendationTrack(
+        id=video.video_id,
+        title=video.title,
+        artist=video.author_name,
+        view_count=video.view_count,
+        duration_seconds=video.duration_seconds,
+    )
 
 
 def pick_video_recommendation(
@@ -64,12 +71,16 @@ def pick_video_recommendation(
     candidates: List[VideoInfo],
     source_query: str,
     played_ids: Set[str],
+    taste_profile: Optional[TasteProfile] = None,
+    recent_artists: Sequence[str] = (),
 ) -> Optional[VideoInfo]:
     recommendation = pick_recommendation(
         as_recommendation_track(current),
         [as_recommendation_track(candidate) for candidate in candidates],
         source_query,
         played_ids,
+        taste_profile,
+        recent_artists,
     )
     if recommendation is None:
         return None
@@ -77,6 +88,30 @@ def pick_video_recommendation(
         if candidate.video_id == recommendation.id:
             return candidate
     return None
+
+
+def radio_seed_queries(
+    current: VideoInfo,
+    source_query: str,
+    taste_profile: TasteProfile,
+) -> List[Tuple[str, str]]:
+    """Seed (query, label) pairs for pool expansion: artist + query first,
+    then the listener's favorite artists from their taste profile
+    (Spotify-style radio re-seeding, minus the server)."""
+    seeds = [(build_recommendation_query(as_recommendation_track(current), source_query), current.author_name)]
+    favorites = sorted(
+        taste_profile.artists.items(),
+        key=lambda item: (-item[1].plays, -item[1].last_played),
+    )
+    current_artist = current.author_name.strip().lower()
+    for name, stats in favorites:
+        if name == current_artist or stats.plays < 2:
+            continue
+        query = f"{name} {source_query} music" if source_query.strip() else f"{name} music"
+        seeds.append((query, name))
+        if len(seeds) >= 4:
+            break
+    return seeds
 
 
 def print_now_playing(video: VideoInfo, autoplay: bool) -> None:
@@ -518,6 +553,7 @@ def main() -> None:
     positional_query = " ".join(a for a in argv if not a.startswith("-")).strip()
     initial_query: Optional[str] = positional_query or None
 
+    taste = load_profile()
     print_banner()
 
     while True:
@@ -566,6 +602,7 @@ def main() -> None:
                 current_video: VideoInfo = selected_video
                 recommendation_pool = results
                 played_ids: Set[str] = set()
+                recent_artists: List[str] = []
                 autoplay = False
 
                 while True:
@@ -574,16 +611,31 @@ def main() -> None:
 
                     outcome = play_audio(current_video)
                     if outcome.stopped_by_user:
-                        # Escape is an intentional stop: return to the user's current results.
+                        # Escape is an intentional stop: count it as a skip in the
+                        # taste profile, then return to the user's current results.
+                        record_skip(taste, as_recommendation_track(current_video))
+                        save_profile(taste)
                         continue_with_same_results = True
                         break
 
-                    next_video = pick_video_recommendation(current_video, recommendation_pool, query, played_ids)
+                    record_play(taste, as_recommendation_track(current_video), query)
+                    save_profile(taste)
+                    recent_artists.append(current_video.author_name)
+
+                    next_video = pick_video_recommendation(
+                        current_video, recommendation_pool, query, played_ids, taste, recent_artists,
+                    )
                     if next_video is None:
-                        recommendation_query = build_recommendation_query(as_recommendation_track(current_video), query)
-                        print_status("info", f"Finding more like {current_video.author_name}")
-                        recommendation_pool = search_youtube(recommendation_query)
-                        next_video = pick_video_recommendation(current_video, recommendation_pool, query, played_ids)
+                        # Expand the pool: artist + query first, then radio seeds
+                        # drawn from the listener's favorite artists.
+                        for seed_query, seed_label in radio_seed_queries(current_video, query, taste):
+                            print_status("info", f"Finding more like {seed_label}")
+                            recommendation_pool = search_youtube(seed_query)
+                            next_video = pick_video_recommendation(
+                                current_video, recommendation_pool, query, played_ids, taste, recent_artists,
+                            )
+                            if next_video is not None:
+                                break
 
                     if next_video is None:
                         print_status("warning", "No new recommendation found · start another search")
