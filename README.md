@@ -75,6 +75,9 @@ music "Nujabes modal soul"
 # When a track finishes, music-cli automatically plays an unplayed, relevant track.
 # Press Esc at any time to stop autoplay and return to the result list.
 
+# Build a queue from the search list ("+ Add to queue") — queued tracks play in
+# order before the radio. Press n during playback to skip to the next track.
+
 # Start a 25/5 focus session with music
 music --pomodoro --query "lofi hip hop"
 
@@ -92,6 +95,7 @@ Set `NO_COLOR=1` to run without terminal colors.
 | Context | Key | Action |
 | --- | --- | --- |
 | Playback | `←` / `→` | Seek backward / forward 5 seconds |
+| Playback | `n` | Skip to the next track (queue first, then radio) |
 | Playback | `Esc` | Stop playback |
 | Playback | `Ctrl+C` | Quit |
 | Pomodoro | `s` | Skip the current phase |

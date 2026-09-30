@@ -50,8 +50,12 @@ music --pomodoro --preset deep --query "jazz focus"
 music --help
 ```
 
-Keys (playback): ←/→ seek ±5s · Esc stop autoplay · Ctrl+C quit
+Keys (playback): ←/→ seek ±5s · n skip (queue first, then radio) · Esc stop · Ctrl+C quit
 Keys (pomodoro): s skip phase · Esc stop music only · q quit · Ctrl+C quit
+
+The search menu also offers **View queue** and **Quit**; a chosen track can be
+played immediately or held with **Add to queue**. Queued tracks play in FIFO
+order before the personal radio fills in; Esc never consumes a queued track.
 
 ## How it maps to the TypeScript original
 
