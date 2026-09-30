@@ -24,6 +24,7 @@ class VideoInfo:
     duration_seconds: int
     duration_timestamp: str
     author_name: str
+    view_count: int = 0
 
 
 def format_duration(total_seconds: float) -> str:
@@ -85,6 +86,7 @@ def search_youtube(query: str, limit: int = 10) -> list[VideoInfo]:
         duration = entry.get("duration")
         seconds = int(round(duration)) if isinstance(duration, (int, float)) else 0
         timestamp = "LIVE" if entry.get("is_live") else (format_duration(seconds) if seconds > 0 else "0:00")
+        views = entry.get("view_count")
         videos.append(VideoInfo(
             title=entry.get("title") or "Unknown title",
             video_id=video_id,
@@ -92,6 +94,7 @@ def search_youtube(query: str, limit: int = 10) -> list[VideoInfo]:
             duration_seconds=seconds,
             duration_timestamp=timestamp,
             author_name=entry.get("channel") or entry.get("uploader") or "Unknown artist",
+            view_count=int(views) if isinstance(views, (int, float)) else 0,
         ))
         if len(videos) >= limit:
             break
