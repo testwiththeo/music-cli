@@ -125,3 +125,11 @@ No audio URLs are stored. No media files are downloaded.
 bun test
 bun run typecheck
 ```
+
+## Python port
+
+A dependency-free Python translation of this CLI lives in
+[`python/`](./python) — same features and controls, driven by yt-dlp and
+ffmpeg, with no npm packages (yt-dlp doubles as the search provider). See
+[`python/README.md`](./python/README.md) for install instructions and the
+full TypeScript → Python module mapping.
