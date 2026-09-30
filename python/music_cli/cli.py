@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import queue
+import shutil
 import signal
 import subprocess
 import sys
@@ -41,11 +42,28 @@ from .ui import (
     print_banner,
     print_card,
     print_status,
+    red,
     render_progress,
     ui,
     with_spinner,
 )
 from .youtube import VideoInfo, parse_duration, resolve_audio_url
+
+
+def run_preflight() -> None:
+    """PRD required capability: fail before prompting when a runtime
+    dependency is unavailable, with actionable install guidance."""
+    missing = []
+    if shutil.which("yt-dlp") is None:
+        missing.append(("yt-dlp", "install: https://github.com/yt-dlp/yt-dlp (update in place: yt-dlp -U)"))
+    if shutil.which("ffplay") is None:
+        missing.append(("ffplay", "install ffmpeg: https://ffmpeg.org/download.html"))
+    if not missing:
+        return
+    print_status("error", "music-cli is missing required tools:")
+    for name, fix in missing:
+        print(f"  {red('×')} {name} — {fix}")
+    sys.exit(1)
 
 
 def search_youtube(query: str) -> List[VideoInfo]:
@@ -156,6 +174,7 @@ class _PlaybackSession:
 
         # Must run on the main thread for signal handling (like the original).
         previous_sigint = signal.signal(signal.SIGINT, self._on_sigint)
+        previous_sigterm = signal.signal(signal.SIGTERM, self._on_sigterm)
         if self._raw_saved is not None:
             threading.Thread(target=self._key_loop, daemon=True).start()
         threading.Thread(target=self._ticker, daemon=True).start()
@@ -165,6 +184,7 @@ class _PlaybackSession:
             self._done.wait()
         finally:
             signal.signal(signal.SIGINT, previous_sigint)
+            signal.signal(signal.SIGTERM, previous_sigterm)
             self._cleanup()
         if self._error is not None:
             raise self._error
@@ -284,6 +304,13 @@ class _PlaybackSession:
                 pass
         os._exit(0)
 
+    def _on_sigterm(self, signum, frame) -> None:
+        # External kill request: clean up, but it is not a taste signal.
+        print("")
+        print_status("warning", "Playback stopped")
+        self._finish(stopped_by_user=True)
+        os._exit(0)
+
     def _ticker(self) -> None:
         # Estimated progress; actual player position is not exposed by ffplay.
         while not self._stop_threads.wait(1.0):
@@ -376,7 +403,7 @@ def countdown_with_keys(
         sys.stdout.write("\n")
         sys.stdout.flush()
 
-    def on_sigint(signum, frame) -> None:
+    def on_quit_signal(signum, frame) -> None:
         key_events.put(b"\x03")
 
     def reader() -> None:
@@ -387,7 +414,8 @@ def countdown_with_keys(
 
     if use_raw:
         threading.Thread(target=reader, daemon=True).start()
-    previous_sigint = signal.signal(signal.SIGINT, on_sigint)
+    previous_sigint = signal.signal(signal.SIGINT, on_quit_signal)
+    previous_sigterm = signal.signal(signal.SIGTERM, on_quit_signal)
 
     render()
     while not finished.is_set():
@@ -419,6 +447,7 @@ def countdown_with_keys(
 
     cleanup()
     signal.signal(signal.SIGINT, previous_sigint)
+    signal.signal(signal.SIGTERM, previous_sigterm)
     return ctrl
 
 
