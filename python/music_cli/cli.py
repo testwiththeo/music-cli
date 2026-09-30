@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Set, Tuple
+from typing import Callable, List, Optional, Sequence, Set, Tuple
 
 from . import terminal
 from . import youtube as youtube_search
@@ -35,7 +35,7 @@ from .recommendations import (
     build_recommendation_query,
     pick_recommendation,
 )
-from .taste import TasteProfile, load_profile, record_play, record_skip
+from .taste import TasteProfile, load_profile, record_play, record_skip, save_profile
 from .ui import (
     dim,
     print_banner,
@@ -135,9 +135,10 @@ class PlayResult:
 class _PlaybackSession:
     """Streams one track through ffplay while owning keyboard seek/stop."""
 
-    def __init__(self, audio_url: str, total_seconds: int) -> None:
+    def __init__(self, audio_url: str, total_seconds: int, on_interrupt: Optional[Callable[[], None]] = None) -> None:
         self.audio_url = audio_url
         self.total_seconds = total_seconds
+        self._on_interrupt = on_interrupt
         self._lock = threading.Lock()
         self._done = threading.Event()
         self._stop_threads = threading.Event()
@@ -257,19 +258,30 @@ class _PlaybackSession:
             return
 
         # A plain Escape is one byte; arrow keys begin with Escape but are
-        # handled above. Ctrl+C (0x03 — ISIG is off in raw mode) quits outright,
-        # matching the documented controls and the SIGINT path.
+        # handled above. Ctrl+C (0x03 — ISIG is off in raw mode) records the
+        # stop in the taste profile, then quits outright, matching the
+        # documented controls and the SIGINT path.
         if is_escape_key(chunk) or chunk == b"\x03":
             print("")
             print_status("warning", "Playback stopped")
             self._finish(stopped_by_user=True)
             if chunk == b"\x03":
+                if self._on_interrupt is not None:
+                    try:
+                        self._on_interrupt()  # record the skip before force-quitting
+                    except OSError:
+                        pass
                 os._exit(0)
 
     def _on_sigint(self, signum, frame) -> None:
         print("")
         print_status("warning", "Playback stopped")
         self._finish(stopped_by_user=True)
+        if self._on_interrupt is not None:
+            try:
+                self._on_interrupt()  # record the skip before force-quitting
+            except OSError:
+                pass
         os._exit(0)
 
     def _ticker(self) -> None:
@@ -318,7 +330,7 @@ class _PlaybackSession:
         sys.stdout.flush()
 
 
-def play_audio(video: VideoInfo) -> PlayResult:
+def play_audio(video: VideoInfo, on_interrupt: Optional[Callable[[], None]] = None) -> PlayResult:
     try:
         audio_url = with_spinner("Resolving audio stream", lambda: resolve_audio_url(video.url))
         if not audio_url:
@@ -327,7 +339,7 @@ def play_audio(video: VideoInfo) -> PlayResult:
     except Exception as error:  # noqa: BLE001 — reported, then re-raised like the original
         print_status("error", f"Playback failed: {error}")
         raise
-    return _PlaybackSession(audio_url, total_seconds).run()
+    return _PlaybackSession(audio_url, total_seconds, on_interrupt).run()
 
 
 @dataclass
@@ -609,7 +621,13 @@ def main() -> None:
                     print_now_playing(current_video, autoplay)
                     played_ids.add(current_video.video_id)
 
-                    outcome = play_audio(current_video)
+                    def on_interrupt() -> None:
+                        # Ctrl+C / SIGINT never returns to the main loop, so the
+                        # skip is recorded here, before the process force-quits.
+                        record_skip(taste, as_recommendation_track(current_video))
+                        save_profile(taste)
+
+                    outcome = play_audio(current_video, on_interrupt)
                     if outcome.stopped_by_user:
                         # Escape is an intentional stop: count it as a skip in the
                         # taste profile, then return to the user's current results.
