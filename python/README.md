@@ -84,6 +84,23 @@ Keys (pomodoro): s skip phase · Esc stop music only · q quit · Ctrl+C quit
   countdown still stops the music (the original matches on the first byte,
   `27`), and an empty `--focus` flag still fails validation the same way.
 
+## Personal radio
+
+Autoplay is personalized by a local taste profile — Spotify's algorithm,
+rebuilt for a terminal with no accounts and no telemetry:
+
+- **Finished tracks** boost their artist; **Esc-stopped tracks** count as skips
+  and demote theirs.
+- Candidates get a small popularity boost and a duration-fit penalty, so a
+  6-hour mix won't follow a 3-minute song.
+- After three tracks by the same artist in a row, the radio deliberately
+  varies artists.
+- When the result pool runs dry, it re-seeds from your most-played artists.
+
+The profile lives at `~/.local/share/music-cli/taste.json` (`Application
+Support` on macOS, `%APPDATA%` on Windows), prunes stale low-signal entries,
+and never leaves your machine.
+
 ## Development
 
 ```bash

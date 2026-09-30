@@ -107,7 +107,9 @@ Set `NO_COLOR=1` to run without terminal colors.
    terminal in control of keyboard input.
 5. After a track completes, candidates are ranked by artist, title, and the
    original search. Played tracks are excluded. When the original results are
-   exhausted, a fresh artist-and-query search expands the radio.
+   exhausted, a fresh artist-and-query search expands the radio. The Python
+   port adds a local taste profile: plays and skips per artist shape the
+   ranking, and the radio re-seeds from your most-played artists.
 
 No audio URLs are stored. No media files are downloaded.
 
