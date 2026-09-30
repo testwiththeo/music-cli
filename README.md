@@ -2,8 +2,8 @@
 
 > Play music, not the recommendation feed.
 
-YouTube is great at finding a song and terrible at letting you return to work.
-One search becomes thumbnails, comments, Shorts, autoplay, and another 20 minutes
+YouTube, Spotify, and other music platforms are too distracting. One search
+becomes thumbnails, comments, Shorts, and autoplay — and another 20 minutes
 gone. `music-cli` keeps the useful part: search for a track, stream it in your
 terminal, and keep your attention where it belongs.
 
@@ -11,12 +11,13 @@ It is a keyboard-first music player with a built-in Pomodoro mode for focused
 work sessions. No browser tab. No downloads. No recommendation rabbit hole.
 
 ```text
-  __  __ _   _ ____ ___ ____
- |  \/  | | | / ___|_ _/ ___|  // CLI
- | |\/| | | | \___ \| |\___ \
- | |  | | |_| |___) | | ___) |
- |_|  |_|\___/|____/___|____/
-
+███╗   ███╗██╗   ██╗███████╗██╗ ██████╗  ██████╗██╗     ██╗
+████╗ ████║██║   ██║██╔════╝██║██╔════╝ ██╔════╝██║     ██║
+██╔████╔██║██║   ██║███████╗██║██║█████╗██║     ██║     ██║
+██║╚██╔╝██║██║   ██║╚════██║██║██║╚════╝██║     ██║     ██║
+██║ ╚═╝ ██║╚██████╔╝███████║██║╚██████╗ ╚██████╗███████╗██║
+╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═╝ ╚═════╝  ╚═════╝╚══════╝╚═╝
+▶ ▁▂▄▆█▆▄▂▁▂▄▇▆▄▂▁▂▅▇▅▂▁▂▄▆▄▂
   terminal sound system · search / stream / focus
 ```
 
