@@ -47,7 +47,12 @@ from .ui import (
     ui,
     with_spinner,
 )
+from .track_queue import TrackQueue
 from .youtube import VideoInfo, parse_duration, resolve_audio_url
+
+# Special track-menu rows (values in the select list that are not tracks).
+VIEW_QUEUE = "view-queue"
+QUIT = "quit"
 
 
 def run_preflight() -> None:
@@ -132,12 +137,15 @@ def radio_seed_queries(
     return seeds
 
 
-def print_now_playing(video: VideoInfo, autoplay: bool) -> None:
+def print_now_playing(video: VideoInfo, autoplay: bool, queue_length: int = 0) -> None:
     print("")
-    print_card("AUTOPLAY · FOR YOU" if autoplay else "NOW PLAYING", [
+    lines = [
         ui.cyan(video.title),
         f"{video.author_name} · {video.duration_timestamp}",
-    ])
+    ]
+    if queue_length > 0:
+        lines.append(dim(f"{queue_length} queued · n skip"))
+    print_card("AUTOPLAY · FOR YOU" if autoplay else "NOW PLAYING", lines)
     print("")
 
 
@@ -147,7 +155,8 @@ def draw_progress_bar(current: int, total: int) -> None:
 
 @dataclass
 class PlayResult:
-    stopped_by_user: bool
+    stopped_by_user: bool = False
+    skipped: bool = False
 
 
 class _PlaybackSession:
@@ -170,7 +179,7 @@ class _PlaybackSession:
         self._error: Optional[BaseException] = None
 
     def run(self) -> PlayResult:
-        print_status("info", f"{dim('Controls')} ←/→ seek 5s · Esc stop · Ctrl+C quit")
+        print_status("info", f"{dim('Controls')} ←/→ seek 5s · n skip · Esc stop · Ctrl+C quit")
 
         # Must run on the main thread for signal handling (like the original).
         previous_sigint = signal.signal(signal.SIGINT, self._on_sigint)
@@ -278,13 +287,18 @@ class _PlaybackSession:
             return
 
         # A plain Escape is one byte; arrow keys begin with Escape but are
-        # handled above. Ctrl+C (0x03 — ISIG is off in raw mode) records the
-        # stop in the taste profile, then quits outright, matching the
-        # documented controls and the SIGINT path.
+        # handled above. n skips to the next track; Ctrl+C (0x03 — ISIG is off
+        # in raw mode) records the stop in the taste profile, then quits
+        # outright, matching the documented controls and the SIGINT path.
+        if chunk in (b"n", b"N"):
+            print("")
+            print_status("info", "Skipped")
+            self._finish(PlayResult(skipped=True))
+            return
         if is_escape_key(chunk) or chunk == b"\x03":
             print("")
             print_status("warning", "Playback stopped")
-            self._finish(stopped_by_user=True)
+            self._finish(PlayResult(stopped_by_user=True))
             if chunk == b"\x03":
                 if self._on_interrupt is not None:
                     try:
@@ -296,7 +310,7 @@ class _PlaybackSession:
     def _on_sigint(self, signum, frame) -> None:
         print("")
         print_status("warning", "Playback stopped")
-        self._finish(stopped_by_user=True)
+        self._finish(PlayResult(stopped_by_user=True))
         if self._on_interrupt is not None:
             try:
                 self._on_interrupt()  # record the skip before force-quitting
@@ -308,7 +322,7 @@ class _PlaybackSession:
         # External kill request: clean up, but it is not a taste signal.
         print("")
         print_status("warning", "Playback stopped")
-        self._finish(stopped_by_user=True)
+        self._finish(PlayResult(stopped_by_user=True))
         os._exit(0)
 
     def _ticker(self) -> None:
@@ -322,7 +336,7 @@ class _PlaybackSession:
 
     # -- shutdown ----------------------------------------------------------
 
-    def _finish(self, stopped_by_user: bool) -> None:
+    def _finish(self, result: PlayResult) -> None:
         with self._lock:
             if self._settled:
                 return
@@ -331,7 +345,7 @@ class _PlaybackSession:
         if process is not None and process.poll() is None:
             process.kill()
         self._cleanup()
-        self._result = PlayResult(stopped_by_user=stopped_by_user)
+        self._result = result
         self._done.set()
 
     def _fail(self, error: BaseException) -> None:
@@ -561,13 +575,120 @@ Pomodoro options:
   --break-query "<q>"  Optional music for breaks (default: silence)
 
 Keys (pomodoro): s skip phase · Esc stop music only · q quit · Ctrl+C quit
-Keys (playback): ←/→ seek 5s · Esc stop autoplay · Ctrl+C quit
+Keys (playback): ←/→ seek 5s · n skip · Esc stop autoplay · Ctrl+C quit
+Queue: add tracks with "+ Add to queue" — they play in order before the radio.
 
 Examples:
   music --pomodoro --query "lofi hip hop"
   music --pomodoro --preset deep --query "jazz focus"
   music "synthwave"
 """)
+
+
+def print_queue_card(track_queue: TrackQueue) -> None:
+    items = track_queue.items()
+    if not items:
+        print_status("info", "Queue is empty · add tracks with \"+  Add to queue\" from the list")
+        return
+    print_card(f"QUEUE · {len(items)} TRACKS", [
+        f"{index}. {video.title} — {video.author_name} · {video.duration_timestamp}"
+        for index, video in enumerate(items, 1)
+    ])
+
+
+def run_playback(
+    start_video: VideoInfo,
+    source_query: str,
+    result_pool: List[VideoInfo],
+    track_queue: TrackQueue,
+    taste: TasteProfile,
+) -> None:
+    """Play a track, then drain the queue, then the personal radio.
+
+    Returns when the user stops (Esc), skips past the last available track,
+    or a failure exhausts the options — the caller re-shows its menu.
+    """
+    current_video = start_video
+    recommendation_pool = result_pool
+    played_ids: Set[str] = set()
+    recent_artists: List[str] = []
+    autoplay = False
+
+    while True:
+        print_now_playing(current_video, autoplay, len(track_queue))
+        played_ids.add(current_video.video_id)
+
+        def on_interrupt() -> None:
+            # Ctrl+C / SIGINT never returns to the main loop, so the
+            # skip is recorded here, before the process force-quits.
+            record_skip(taste, as_recommendation_track(current_video))
+            save_profile(taste)
+
+        try:
+            outcome = play_audio(current_video, on_interrupt)
+        except Exception:  # noqa: BLE001 — play_audio already reported the failure
+            # Roadmap: decide interactively whether to continue after a
+            # queued track fails.
+            if len(track_queue) == 0:
+                return
+            try:
+                choice = prompt_select(
+                    "That track failed — what now?",
+                    [("▶  Play next queued track", "next"), ("✕  Stop playback", "stop")],
+                )
+            except PromptCancelled:
+                return
+            if choice != "next":
+                return
+            current_video = track_queue.pop()
+            autoplay = False
+            continue
+
+        if outcome.stopped_by_user:
+            # Escape is an intentional stop: count it as a skip in the taste
+            # profile, then hand control back to the caller's menu. The queue
+            # is untouched — stopping never consumes the next track.
+            record_skip(taste, as_recommendation_track(current_video))
+            save_profile(taste)
+            return
+
+        if outcome.skipped:
+            record_skip(taste, as_recommendation_track(current_video))
+        else:
+            record_play(taste, as_recommendation_track(current_video))
+            recent_artists.append(current_video.author_name)
+        save_profile(taste)
+
+        # Queue order wins; the radio only fills in once it runs dry.
+        next_video = track_queue.pop()
+        if next_video is not None:
+            print_status("success", f"Up next (queue): {next_video.title} — {next_video.author_name}")
+            current_video = next_video
+            autoplay = False
+            continue
+
+        next_video = pick_video_recommendation(
+            current_video, recommendation_pool, source_query, played_ids, taste, recent_artists,
+        )
+        if next_video is None:
+            # Expand the pool: artist + query first, then radio seeds
+            # drawn from the listener's favorite artists.
+            for seed_query, seed_label in radio_seed_queries(current_video, source_query, taste):
+                print_status("info", f"Finding more like {seed_label}")
+                recommendation_pool = search_youtube(seed_query)
+                next_video = pick_video_recommendation(
+                    current_video, recommendation_pool, source_query, played_ids, taste, recent_artists,
+                )
+                if next_video is not None:
+                    break
+
+        if next_video is None:
+            print_status("warning", "No new recommendation found · pick another track or search again")
+            return
+
+        print_status("success", f"Up next: {next_video.title} — {next_video.author_name}")
+        current_video = next_video
+        autoplay = True
 
 
 def main() -> None:
@@ -578,6 +699,8 @@ def main() -> None:
     if "--version" in argv or "-V" in argv:
         print(f"music-cli v{__version__}")
         sys.exit(0)
+
+    run_preflight()
 
     pomo = parse_pomodoro_cli_args(argv)
     if pomo.enabled:
@@ -595,6 +718,7 @@ def main() -> None:
     initial_query: Optional[str] = positional_query or None
 
     taste = load_profile()
+    track_queue = TrackQueue()
     print_banner()
 
     while True:
@@ -620,10 +744,14 @@ def main() -> None:
                 print("")
                 continue
 
-            # Keep showing the same results until user finishes a song naturally
+            # Keep showing the same results until the user moves on
             continue_with_same_results = True
             while continue_with_same_results:
-                choices: List[Tuple[str, object]] = [("←  Search again", None)]
+                choices: List[Tuple[str, object]] = [
+                    ("←  Search again", None),
+                    (f"☰  View queue ({len(track_queue)})", VIEW_QUEUE),
+                    ("✕  Quit", QUIT),
+                ]
                 choices += [
                     (
                         f"{ui.cyan('›')} {video.title} {ui.dim(f'— {video.author_name} · {video.duration_timestamp}')}",
@@ -633,65 +761,37 @@ def main() -> None:
                 ]
                 selected_video = prompt_select('Select a track (or choose "Search again"):', choices)
 
-                # If user chose to search again
+                if selected_video == QUIT:
+                    print("\n👋 Goodbye!\n")
+                    sys.exit(0)
+                if selected_video == VIEW_QUEUE:
+                    print_queue_card(track_queue)
+                    print("")
+                    continue
                 if selected_video is None:
                     print("")
                     print_status("info", "New search")
                     print("")
                     break
 
-                current_video: VideoInfo = selected_video
-                recommendation_pool = results
-                played_ids: Set[str] = set()
-                recent_artists: List[str] = []
-                autoplay = False
+                # A track was chosen: play it now or hold it in the queue.
+                try:
+                    action = prompt_select("Play or queue this track?", [
+                        ("▶  Play now", "play"),
+                        ("+  Add to queue", "queue"),
+                    ])
+                except PromptCancelled:
+                    continue  # back to the track list
 
-                while True:
-                    print_now_playing(current_video, autoplay)
-                    played_ids.add(current_video.video_id)
+                if action == "queue":
+                    track_queue.add(selected_video)
+                    print_status("success", f"Queued ({len(track_queue)}): {selected_video.title}")
+                    print("")
+                    continue
 
-                    def on_interrupt() -> None:
-                        # Ctrl+C / SIGINT never returns to the main loop, so the
-                        # skip is recorded here, before the process force-quits.
-                        record_skip(taste, as_recommendation_track(current_video))
-                        save_profile(taste)
-
-                    outcome = play_audio(current_video, on_interrupt)
-                    if outcome.stopped_by_user:
-                        # Escape is an intentional stop: count it as a skip in the
-                        # taste profile, then return to the user's current results.
-                        record_skip(taste, as_recommendation_track(current_video))
-                        save_profile(taste)
-                        continue_with_same_results = True
-                        break
-
-                    record_play(taste, as_recommendation_track(current_video), query)
-                    save_profile(taste)
-                    recent_artists.append(current_video.author_name)
-
-                    next_video = pick_video_recommendation(
-                        current_video, recommendation_pool, query, played_ids, taste, recent_artists,
-                    )
-                    if next_video is None:
-                        # Expand the pool: artist + query first, then radio seeds
-                        # drawn from the listener's favorite artists.
-                        for seed_query, seed_label in radio_seed_queries(current_video, query, taste):
-                            print_status("info", f"Finding more like {seed_label}")
-                            recommendation_pool = search_youtube(seed_query)
-                            next_video = pick_video_recommendation(
-                                current_video, recommendation_pool, query, played_ids, taste, recent_artists,
-                            )
-                            if next_video is not None:
-                                break
-
-                    if next_video is None:
-                        print_status("warning", "No new recommendation found · start another search")
-                        continue_with_same_results = False
-                        break
-
-                    print_status("success", f"Up next: {next_video.title} — {next_video.author_name}")
-                    current_video = next_video
-                    autoplay = True
+                run_playback(selected_video, query, results, track_queue, taste)
+                # Playback session over (Esc, exhausted radio, or failure):
+                # the same results come back, queue intact.
 
         except (PromptCancelled, KeyboardInterrupt):
             # Prompts cancel the same way inquirer's exit error did.
