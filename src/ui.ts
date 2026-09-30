@@ -23,18 +23,31 @@ function terminalWidth(): number {
   return process.stdout.columns && process.stdout.columns >= 40 ? process.stdout.columns : 80;
 }
 
+const BANNER_ART = [
+  "███╗   ███╗██╗   ██╗███████╗██╗ ██████╗  ██████╗██╗     ██╗",
+  "████╗ ████║██║   ██║██╔════╝██║██╔════╝ ██╔════╝██║     ██║",
+  "██╔████╔██║██║   ██║███████╗██║██║█████╗██║     ██║     ██║",
+  "██║╚██╔╝██║██║   ██║╚════██║██║██║╚════╝██║     ██║     ██║",
+  "██║ ╚═╝ ██║╚██████╔╝███████║██║╚██████╗ ╚██████╗███████╗██║",
+  "╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═╝ ╚═════╝  ╚═════╝╚══════╝╚═╝",
+].join("\n");
+const EQUALIZER = "▁▂▄▆█▆▄▂▁▂▄▇▆▄▂▁▂▅▇▅▂▁▂▄▆▄▂";
+const TAGLINE = "terminal sound system · search / stream / focus";
+
 export function printBanner(): void {
   if (!process.stdout.isTTY) {
     console.log("music-cli");
     return;
   }
 
-  console.log(cyan("  __  __ _   _ ____ ___ ____  "));
-  console.log(cyan(" |  \\/  | | | / ___|_ _/ ___| ") + magenta(" // CLI"));
-  console.log(cyan(" | |\\/| | | | \\___ \\| |\\___ \\"));
-  console.log(cyan(" | |  | | |_| |___) | | ___) |"));
-  console.log(cyan(" |_|  |_|\\___/|____/___|____/ "));
-  console.log(dim("  terminal sound system · search / stream / focus\n"));
+  if ((process.stdout.columns ?? 80) < 64) {
+    console.log(`${bold("♪ music-cli ")}${dim(TAGLINE)}`);
+    return;
+  }
+
+  console.log(cyan(BANNER_ART));
+  console.log(magenta("▶ ") + cyan(EQUALIZER));
+  console.log(dim(TAGLINE) + "\n");
 }
 
 export function printCard(title: string, lines: string[]): void {

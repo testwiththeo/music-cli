@@ -70,17 +70,29 @@ def terminal_width() -> int:
     return columns if columns >= 40 else 80
 
 
+_BANNER_ART = """\
+███╗   ███╗██╗   ██╗███████╗██╗ ██████╗  ██████╗██╗     ██╗
+████╗ ████║██║   ██║██╔════╝██║██╔════╝ ██╔════╝██║     ██║
+██╔████╔██║██║   ██║███████╗██║██║█████╗██║     ██║     ██║
+██║╚██╔╝██║██║   ██║╚════██║██║██║╚════╝██║     ██║     ██║
+██║ ╚═╝ ██║╚██████╔╝███████║██║╚██████╗ ╚██████╗███████╗██║
+╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═╝ ╚═════╝  ╚═════╝╚══════╝╚═╝"""
+_EQUALIZER = "▁▂▄▆█▆▄▂▁▂▄▇▆▄▂▁▂▅▇▅▂▁▂▄▆▄▂"
+_TAGLINE = "terminal sound system · search / stream / focus"
+
+
 def print_banner() -> None:
     if not sys.stdout.isatty():
         print("music-cli")
         return
 
-    print(cyan("  __  __ _   _ ____ ___ ____  "))
-    print(cyan(" |  \\/  | | | / ___|_ _/ ___| ") + magenta(" // CLI"))
-    print(cyan(" | |\\/| | | | \\___ \\| |\\___ \\"))
-    print(cyan(" | |  | | |_| |___) | | ___) |"))
-    print(cyan(" |_|  |_|\\___/|____/___|____/ "))
-    print(dim("  terminal sound system · search / stream / focus\n"))
+    if terminal_width() < 64:
+        print(bold("♪ music-cli ") + dim(_TAGLINE))
+        return
+
+    print(cyan(_BANNER_ART))
+    print(magenta("▶ ") + cyan(_EQUALIZER))
+    print(dim(_TAGLINE) + "\n")
 
 
 def print_card(title: str, lines: list[str]) -> None:
