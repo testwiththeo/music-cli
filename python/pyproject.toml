@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "music-cli"
+description = "YouTube music CLI with Pomodoro focus sessions"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+dynamic = ["version"]
+classifiers = [
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+
+[project.scripts]
+music = "music_cli.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["music_cli"]
+
+[tool.setuptools.dynamic]
+version = { attr = "music_cli.__version__" }
+
+[tool.setuptools.package-data]
+music_cli = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
